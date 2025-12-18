@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Logdash } from '../Logdash_.js';
+import { Logdash } from '../LogDash.js';
 
 describe('Logdash', () => {
 	beforeEach(() => {

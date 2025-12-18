@@ -1,3 +1,3 @@
-export { Logdash } from './Logdash_.js';
-export type { LogdashOptions } from './Logdash_.js';
+export { Logdash } from './LogDash.js';
+export type { LogdashOptions } from './LogDash.js';
 export { LogLevel } from './types/LogLevel.js';

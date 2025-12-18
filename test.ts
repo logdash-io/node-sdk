@@ -1,16 +1,32 @@
 // npx ts-node test.ts
-import { createLogDash } from './dist/index';
+import { Logdash } from './dist/index';
 
-const { logger } = createLogDash();
+// Basic usage without API key (logs to console only, queues but won't send)
+const logdash = new Logdash();
 
-logger.error('This is an error message');
-logger.warn('This is a warning message');
-logger.info('This is an info message');
-logger.http('This is an http message');
-logger.verbose('This is a verbose message');
-logger.debug('This is a debug message');
-logger.silly('This is a silly message');
+logdash.error('This is an error message');
+logdash.warn('This is a warning message');
+logdash.info('This is an info message');
+logdash.http('This is an http message');
+logdash.verbose('This is a verbose message');
+logdash.debug('This is a debug message');
+logdash.silly('This is a silly message');
 
-const { logger: syncLogger } = createLogDash({ apiKey: 'MY_API_KEY' });
+// Usage with API key
+const syncedLogdash = new Logdash('MY_API_KEY');
 
-syncLogger.error('This is a SYNCED error message');
+syncedLogdash.error('This is a SYNCED error message');
+
+// Namespaced logging
+const authLogger = syncedLogdash.withNamespace('auth');
+authLogger.info('User logged in');
+authLogger.setMetric('login_count', 1);
+
+// Metrics
+syncedLogdash.setMetric('active_users', 42);
+syncedLogdash.mutateMetric('requests', 1);
+
+// Graceful shutdown - wait for all pending items
+syncedLogdash.flush().then(() => {
+	console.log('All logs and metrics flushed!');
+});

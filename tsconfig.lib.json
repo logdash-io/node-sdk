@@ -1,28 +1,29 @@
 {
-    "extends": "./tsconfig.json",
-    "compilerOptions": {
-        "esModuleInterop": true,
-        "skipLibCheck": true,
-        "target": "es5",
-        "allowJs": true,
-        "resolveJsonModule": true,
-        "moduleDetection": "force",
-        "isolatedModules": true,
-        "strict": false,
-        "noUncheckedIndexedAccess": true,
-        "noImplicitOverride": true,
-        "module": "CommonJS",
-        "outDir": "dist",
-        "rootDir": "src",
-        "sourceMap": true,
-        "declaration": true,
-        "declarationMap": true
-    },
-    "exclude": [
-        "src/**/*.spec.ts",
-        "node_modules/**/*"
-    ],
-    "include": [
-        "src/**/*.ts"
-    ]
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "target": "ES2020",
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "moduleDetection": "force",
+    "isolatedModules": true,
+    "strict": false,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "dist",
+    "rootDir": "src",
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true
+  },
+  "exclude": [
+    "src/**/*.spec.ts",
+    "node_modules/**/*"
+  ],
+  "include": [
+    "src/**/*.ts"
+  ]
 }

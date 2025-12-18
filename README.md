@@ -1,6 +1,6 @@
-# logdash - JS SDK
+# @logdash/node
 
-Logdash is a zero-config observability platform. This package serves an javascript interface to use it.
+Logdash is a zero-config observability platform. This package serves a Node.js/Bun/Deno/Browser interface to use it.
 
 ## Pre-requisites
 
@@ -9,39 +9,48 @@ Setup your free project in less than 2 minutes at [logdash.io](https://logdash.i
 ## Installation
 
 ```
-npm install @logdash/js-sdk
+npm install @logdash/node
 ```
 
 ## Logging
 
 ```typescript
-import { createLogDash } from '@logdash/js-sdk';
+import { Logdash } from '@logdash/node';
 
-const { logger } = createLogDash({
-	// optional, but recommended to see your logs in the dashboard
-	apiKey: '<your-api-key>',
-});
+const logdash = new Logdash('<your-api-key>');
 
-logger.info('Application started successfully');
-logger.error('An unexpected error occurred');
-logger.warn('Low disk space warning');
+logdash.info('Application started successfully');
+logdash.error('An unexpected error occurred');
+logdash.warn('Low disk space warning');
+```
+
+## Namespaced Logging
+
+```typescript
+const authLogdash = logdash.withNamespace('auth');
+authLogdash.info('User logged in');
+authLogdash.error('Authentication failed');
 ```
 
 ## Metrics
 
 ```typescript
-import { createLogDash } from '@logdash/js-sdk';
+import { Logdash } from '@logdash/node';
 
-const { metrics } = createLogDash({
-	// optional, but recommended as metrics are only hosted remotely
-	apiKey: '<your-api-key>',
-});
+const logdash = new Logdash('<your-api-key>');
 
 // to set absolute value
-metrics.set('users', 0);
+logdash.setMetric('users', 0);
 
 // to modify existing metric
-metrics.mutate('users', 1);
+logdash.mutateMetric('users', 1);
+```
+
+## Graceful Shutdown
+
+```typescript
+// Ensure all logs and metrics are sent before exiting
+await logdash.flush();
 ```
 
 ## View
@@ -53,19 +62,19 @@ To see the logs or metrics, go to your project dashboard
 
 ## Configuration
 
-| Parameter | Required | Default | Description                                                                                                              |
-| --------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `apiKey`  | no       | -       | Api key used to authorize against logdash servers. If you don't provide one, logs will be logged into local console only |
-| `host`    | no       | -       | Custom API host, useful with self-hosted instances                                                                       |
-| `verbose` | no       | -       | Useful for debugging purposes                                                                                            |
+```typescript
+new Logdash(apiKey?, options?)
+```
+
+| Parameter         | Required | Default                  | Description                                                                                                              |
+| ----------------- | -------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `apiKey`          | no       | -                        | Api key used to authorize against logdash servers. If you don't provide one, logs will be logged into local console only |
+| `options.host`    | no       | `https://api.logdash.io` | Custom API host, useful with self-hosted instances                                                                       |
+| `options.verbose` | no       | `false`                  | Useful for debugging purposes                                                                                            |
 
 ## License
 
 This project is licensed under the MIT License.
-
-## Contributing
-
-Contributions are welcome! Feel free to open issues or submit pull requests.
 
 ## Support
 

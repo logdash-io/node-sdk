@@ -1,6 +1,6 @@
 # @logdash/node
 
-Logdash is a zero-config observability platform. This package serves a Node.js/Bun/Deno/Browser interface to use it.
+Logdash is a zero-config observability platform. This package serves a NodeJS/Bun/Deno interface to use it.
 
 ## Pre-requisites
 
@@ -57,8 +57,7 @@ await logdash.flush();
 
 To see the logs or metrics, go to your project dashboard
 
-![logs](docs/logs.png)
-![delta](docs/delta.png)
+![dashboard](docs/image.png)
 
 ## Configuration
 

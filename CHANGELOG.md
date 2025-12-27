@@ -1,5 +1,11 @@
 # @logdash/core
 
+## 1.0.2
+
+### Patch Changes
+
+- 54ebf48: chore: noop
+
 ## 1.0.1
 
 ### Patch Changes

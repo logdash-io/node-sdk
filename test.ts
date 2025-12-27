@@ -13,14 +13,22 @@ logdash.debug('This is a debug message');
 logdash.silly('This is a silly message');
 
 // Usage with API key
-const syncedLogdash = new Logdash('MY_API_KEY');
+const syncedLogdash = new Logdash('API_KEY', {
+	host: 'https://dev-api.logdash.io',
+});
 
 syncedLogdash.error('This is a SYNCED error message');
 
 // Namespaced logging
 const authLogger = syncedLogdash.withNamespace('auth');
 authLogger.info('User logged in');
-authLogger.setMetric('login_count', 1);
+authLogger.mutateMetric('login_count', 1);
+
+const paymentsLogger = syncedLogdash.withNamespace('payments');
+paymentsLogger.info('Payment processed');
+paymentsLogger.warn('Payment gate not responding in 5s');
+paymentsLogger.error('Payment failed');
+paymentsLogger.mutateMetric('payment_count', 1);
 
 // Metrics
 syncedLogdash.setMetric('active_users', 42);
@@ -29,4 +37,5 @@ syncedLogdash.mutateMetric('requests', 1);
 // Graceful shutdown - wait for all pending items
 syncedLogdash.flush().then(() => {
 	console.log('All logs and metrics flushed!');
+	process.exit(0);
 });

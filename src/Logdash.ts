@@ -6,26 +6,16 @@ import {
 	LogPayload,
 	MetricPayload,
 } from './transport/HttpTransport.js';
-import { LogLevel } from './types/LogLevel.js';
+import { LogLevel, LOG_LEVEL_COLORS } from './types/LogLevel.js';
 
 export interface LogdashOptions {
 	host?: string;
 	verbose?: boolean;
 }
 
-const LOG_LEVEL_COLORS: Record<LogLevel, [number, number, number]> = {
-	[LogLevel.ERROR]: [231, 0, 11],
-	[LogLevel.WARN]: [254, 154, 0],
-	[LogLevel.INFO]: [21, 93, 252],
-	[LogLevel.HTTP]: [0, 166, 166],
-	[LogLevel.VERBOSE]: [0, 166, 0],
-	[LogLevel.DEBUG]: [0, 166, 62],
-	[LogLevel.SILLY]: [80, 80, 80],
-};
-
 interface LogdashCore {
-	logQueue: RequestQueue<LogPayload>;
-	metricQueue: RequestQueue<MetricPayload>;
+	logQueue: RequestQueue<LogPayload> | null;
+	metricQueue: RequestQueue<MetricPayload> | null;
 	sequenceNumber: number;
 	verbose: boolean;
 }
@@ -46,21 +36,35 @@ export class Logdash {
 			this.namespace = optionsOrNamespace as string;
 		} else {
 			// Public constructor: new Logdash(apiKey?, options?)
-			const apiKey = apiKeyOrCore ?? '';
+			const apiKey = apiKeyOrCore;
 			const options = optionsOrNamespace as LogdashOptions | undefined;
-			const host = options?.host ?? 'https://api.logdash.io';
 			const verbose = options?.verbose ?? false;
 
-			const transport = new HttpTransport({ host, apiKey });
+			if (apiKey) {
+				// Remote mode: create transport and queues
+				const host = options?.host ?? 'https://api.logdash.io';
+				const transport = new HttpTransport({ host, apiKey });
 
-			this.core = {
-				logQueue: new RequestQueue((logs) => transport.sendLogs(logs)),
-				metricQueue: new RequestQueue((metrics) =>
-					transport.sendMetrics(metrics),
-				),
-				sequenceNumber: 0,
-				verbose,
-			};
+				this.core = {
+					logQueue: new RequestQueue((logs) =>
+						transport.sendLogs(logs),
+					),
+					metricQueue: new RequestQueue((metrics) =>
+						transport.sendMetrics(metrics),
+					),
+					sequenceNumber: 0,
+					verbose,
+				};
+			} else {
+				internalLogger.warn('No API key provided, using local mode.');
+				// Local mode: console-only, no transport or queues
+				this.core = {
+					logQueue: null,
+					metricQueue: null,
+					sequenceNumber: 0,
+					verbose,
+				};
+			}
 			this.namespace = undefined;
 		}
 	}
@@ -107,6 +111,10 @@ export class Logdash {
 	// === Metric Methods ===
 
 	setMetric(name: string, value: number): void {
+		if (!this.core.metricQueue) {
+			return; // Local mode: metrics are not supported
+		}
+
 		if (this.core.verbose) {
 			internalLogger.verbose(`Setting metric ${name} to ${value}`);
 		}
@@ -120,6 +128,10 @@ export class Logdash {
 	}
 
 	mutateMetric(name: string, delta: number): void {
+		if (!this.core.metricQueue) {
+			return; // Local mode: metrics are not supported
+		}
+
 		if (this.core.verbose) {
 			internalLogger.verbose(`Mutating metric ${name} by ${delta}`);
 		}
@@ -141,6 +153,10 @@ export class Logdash {
 	// === Lifecycle ===
 
 	async flush(): Promise<void> {
+		if (!this.core.logQueue || !this.core.metricQueue) {
+			return; // Local mode: nothing to flush
+		}
+
 		await Promise.all([
 			this.core.logQueue.flush(),
 			this.core.metricQueue.flush(),
@@ -148,8 +164,8 @@ export class Logdash {
 	}
 
 	destroy(): void {
-		this.core.logQueue.destroy();
-		this.core.metricQueue.destroy();
+		this.core.logQueue?.destroy();
+		this.core.metricQueue?.destroy();
 	}
 
 	// === Private Methods ===
@@ -161,8 +177,8 @@ export class Logdash {
 		// Print to console with colors
 		this.printToConsole(level, message, now);
 
-		// Queue for sending
-		this.core.logQueue.add({
+		// Queue for sending (only in remote mode)
+		this.core.logQueue?.add({
 			message,
 			level,
 			createdAt: now.toISOString(),

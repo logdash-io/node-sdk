@@ -1,6 +1,6 @@
 # @logdash/node
 
-Logdash is a zero-config observability platform. This package serves a NodeJS/Bun/Deno interface to use it.
+Logdash is how SaaS founders keep their apps healthy. This package serves a NodeJS/Bun/Deno interface to use it.
 
 ## Pre-requisites
 

@@ -1,6 +1,6 @@
 {
   "name": "@logdash/node",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": false,
   "description": "How solo founders keep their SaaS apps healthy.",
   "scripts": {

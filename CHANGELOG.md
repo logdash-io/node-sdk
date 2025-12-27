@@ -1,5 +1,11 @@
 # @logdash/core
 
+## 1.0.1
+
+### Patch Changes
+
+- fd7a94b: feat: minor changes
+
 ## 1.0.9
 
 ### Patch Changes

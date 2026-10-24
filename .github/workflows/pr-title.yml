@@ -1,0 +1,18 @@
+name: PR title
+
+# Squash merges use the PR title as the commit subject, and scripts/version.ts reads it to pick the next version.
+on:
+    pull_request:
+        types: [opened, edited, reopened, synchronize]
+
+jobs:
+    conventional:
+        runs-on: ubuntu-latest
+        steps:
+            - env:
+                  TITLE: ${{ github.event.pull_request.title }}
+              run: |
+                  printf '%s' "$TITLE" | grep -qE '^(feat|fix|perf|refactor|docs|test|build|ci|chore|style|revert)(\(.+\))?!?: .+' || {
+                    echo "::error::PR title \"$TITLE\" is not a Conventional Commit, e.g. \"feat: add track for events\" or \"fix(queue): retry only failed metrics\". feat releases a minor, fix/perf a patch, ! a major; other types do not release."
+                    exit 1
+                  }

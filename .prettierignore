@@ -10,3 +10,7 @@ vite.config.js*
 
 pnpm-lock.yaml
 pnpm-workspace.yaml
+
+# Copied verbatim from bestboyhq/tony
+/scripts/version.ts
+/scripts/version.test.ts

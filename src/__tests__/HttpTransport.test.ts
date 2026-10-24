@@ -132,6 +132,36 @@ describe('HttpTransport', () => {
 		});
 	});
 
+	describe('sendEvents', () => {
+		it('posts the event to /events endpoint', async () => {
+			const transport = new HttpTransport({
+				host: 'https://api.test.com',
+				apiKey: 'test-key',
+			});
+			const event = {
+				id: '9b2f6c1e-4d3a-4e8b-a5c7-1f2e3d4c5b6a',
+				name: 'agent_run',
+				props: { model: 'opus', tools: 3, cached: false },
+				userId: 42,
+				app: 'desktop',
+			};
+
+			await transport.sendEvents([event]);
+
+			expect(mockFetch).toHaveBeenCalledWith(
+				'https://api.test.com/events',
+				expect.objectContaining({
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						'project-api-key': 'test-key',
+					},
+				}),
+			);
+			expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual(event);
+		});
+	});
+
 	describe('error handling', () => {
 		it('throws on non-ok response', async () => {
 			mockFetch.mockResolvedValueOnce({

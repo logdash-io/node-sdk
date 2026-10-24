@@ -4,6 +4,12 @@ import { Logdash } from '../Logdash.js';
 describe('Logdash', () => {
 	let mockFetch: ReturnType<typeof vi.fn>;
 
+	// Returns the bodies of the requests sent to path
+	const bodies = (path: string) =>
+		mockFetch.mock.calls
+			.filter(([url]) => url.endsWith(path))
+			.map(([, init]) => JSON.parse(init.body));
+
 	beforeEach(() => {
 		vi.spyOn(console, 'log').mockImplementation(() => {});
 		mockFetch = vi.fn().mockResolvedValue({
@@ -209,30 +215,28 @@ describe('Logdash', () => {
 	});
 
 	describe('app', () => {
-		// Sends a log and a metric from the root and from a namespaced
-		// instance, and returns the request bodies they produced
+		// Sends a log, a metric and an event from the root and from a
+		// namespaced instance, and returns the request bodies they produced
 		async function send(logdash: Logdash) {
 			const auth = logdash.withNamespace('auth');
 			logdash.info('root log');
 			logdash.setMetric('users', 1);
+			logdash.track('app_opened');
 			auth.info('auth log');
 			auth.mutateMetric('logins', 1);
+			auth.track('signup_completed');
 			await logdash.flush();
 			logdash.destroy();
-
-			const bodies = (path: string) =>
-				mockFetch.mock.calls
-					.filter(([url]) => url.endsWith(path))
-					.map(([, init]) => JSON.parse(init.body));
 
 			return {
 				logs: bodies('/logs/batch').flatMap((body) => body.logs),
 				metrics: bodies('/metrics'),
+				events: bodies('/events'),
 			};
 		}
 
-		it('adds app to every log and metric', async () => {
-			const { logs, metrics } = await send(
+		it('adds app to every log, metric and event', async () => {
+			const { logs, metrics, events } = await send(
 				new Logdash('test-key', { app: 'desktop' }),
 			);
 
@@ -257,21 +261,157 @@ describe('Logdash', () => {
 					app: 'desktop',
 				},
 			]);
+			expect(events).toEqual([
+				{ id: expect.any(String), name: 'app_opened', app: 'desktop' },
+				{
+					id: expect.any(String),
+					name: 'signup_completed',
+					app: 'desktop',
+				},
+			]);
 		});
 
 		it.each([undefined, ''])(
-			'leaves app out of every log and metric when app is %j',
+			'leaves app out of every log, metric and event when app is %j',
 			async (app) => {
-				const { logs, metrics } = await send(
+				const { logs, metrics, events } = await send(
 					new Logdash('test-key', { app }),
 				);
 
 				expect(logs).toHaveLength(2);
 				expect(metrics).toHaveLength(2);
-				for (const payload of [...logs, ...metrics]) {
+				expect(events).toHaveLength(2);
+				for (const payload of [...logs, ...metrics, ...events]) {
 					expect(payload).not.toHaveProperty('app');
 				}
 			},
 		);
+	});
+
+	describe('track', () => {
+		const UUID_V4 =
+			/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it('posts each event with its props, userId and own UUID v4 id', async () => {
+			const logdash = new Logdash('test-key');
+			logdash.track(
+				'agent_run',
+				{ model: 'opus', tools: 3, cached: false },
+				{ userId: 42 },
+			);
+			logdash.track('agent_run', undefined, { userId: 'user_7' });
+			await logdash.flush();
+			logdash.destroy();
+
+			expect(mockFetch).toHaveBeenCalledWith(
+				'https://api.logdash.io/events',
+				expect.objectContaining({ method: 'POST' }),
+			);
+			const [first, second] = bodies('/events');
+			expect(first).toEqual({
+				id: expect.stringMatching(UUID_V4),
+				name: 'agent_run',
+				props: { model: 'opus', tools: 3, cached: false },
+				userId: 42,
+			});
+			expect(second).toEqual({
+				id: expect.stringMatching(UUID_V4),
+				name: 'agent_run',
+				userId: 'user_7',
+			});
+			expect(second.id).not.toBe(first.id);
+		});
+
+		it.each(['Agent Run', '1st_run', 'pageview', undefined])(
+			'drops an event named %j with a warning',
+			async (name) => {
+				const logdash = new Logdash('test-key');
+				logdash.track(name);
+				await logdash.flush();
+				logdash.destroy();
+
+				expect(bodies('/events')).toEqual([]);
+				expect(console.log).toHaveBeenCalledWith(
+					expect.stringContaining(`Event "${name}" was not sent`),
+				);
+			},
+		);
+
+		it('drops an event whose userId is an email address with a warning', async () => {
+			const logdash = new Logdash('test-key');
+			logdash.track('agent_run', undefined, {
+				userId: 'alice@example.com',
+			});
+			await logdash.flush();
+			logdash.destroy();
+
+			expect(bodies('/events')).toEqual([]);
+			expect(console.log).toHaveBeenCalledWith(
+				expect.stringContaining('userId must be an internal ID'),
+			);
+		});
+
+		it('re-sends the same id when it retries', async () => {
+			vi.useFakeTimers();
+			mockFetch.mockResolvedValueOnce({
+				ok: false,
+				status: 500,
+				statusText: 'Server Error',
+			});
+			const logdash = new Logdash('test-key');
+			logdash.track('agent_run');
+
+			const flushed = logdash.flush();
+			await vi.advanceTimersByTimeAsync(10_000);
+			await flushed;
+			logdash.destroy();
+
+			const sent = bodies('/events');
+			expect(sent).toHaveLength(2);
+			expect(sent[1].id).toBe(sent[0].id);
+		});
+
+		it('flush waits for pending events', async () => {
+			let respond: (response: object) => void;
+			mockFetch.mockReturnValueOnce(
+				new Promise((resolve) => {
+					respond = resolve;
+				}),
+			);
+			const logdash = new Logdash('test-key');
+			logdash.track('agent_run');
+
+			let flushed = false;
+			const flushing = logdash.flush().then(() => {
+				flushed = true;
+			});
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			expect(flushed).toBe(false);
+
+			respond!({ ok: true, status: 202, statusText: 'Accepted' });
+			await flushing;
+			logdash.destroy();
+			expect(flushed).toBe(true);
+		});
+
+		it('prints the event like a log and sends nothing without an API key', async () => {
+			const logdash = new Logdash();
+			logdash
+				.withNamespace('agents')
+				.track('agent_run', { model: 'opus' });
+			await logdash.flush();
+			logdash.destroy();
+
+			expect(mockFetch).not.toHaveBeenCalled();
+			expect(console.log).toHaveBeenLastCalledWith(
+				expect.stringMatching(
+					/EVENT .*\[agents\] .*agent_run \{"model":"opus"\}/,
+				),
+			);
+		});
 	});
 });

@@ -163,6 +163,16 @@ describe('RequestQueue', () => {
 		});
 	});
 
+	describe('flush timer', () => {
+		it('does not keep the process alive', () => {
+			const queue = new RequestQueue(vi.fn());
+
+			expect(queue['flushTimer'].hasRef()).toBe(false);
+
+			queue.destroy();
+		});
+	});
+
 	describe('destroy', () => {
 		it('stops the flush timer', async () => {
 			const sendFn = vi.fn().mockResolvedValue(undefined);

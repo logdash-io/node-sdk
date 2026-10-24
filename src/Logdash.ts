@@ -1,12 +1,19 @@
+import { randomUUID } from 'node:crypto';
 import chalk from 'chalk';
 import { internalLogger } from './logger/internalLogger.js';
 import { RequestQueue } from './queue/RequestQueue.js';
 import {
+	EventPayload,
 	HttpTransport,
 	LogPayload,
 	MetricPayload,
 } from './transport/HttpTransport.js';
 import { LogLevel, LOG_LEVEL_COLORS } from './types/LogLevel.js';
+
+const EVENT_NAME = /^[a-z][a-z0-9_]{0,63}$/;
+// The website tracker sends these, so the API rejects them from apps
+const WEBSITE_EVENTS = ['pageview', 'pageleave', 'browser_error'];
+const EVENT_COLOR: [number, number, number] = [152, 16, 250];
 
 export interface LogdashOptions {
 	host?: string;
@@ -17,6 +24,7 @@ export interface LogdashOptions {
 interface LogdashCore {
 	logQueue: RequestQueue<LogPayload> | null;
 	metricQueue: RequestQueue<MetricPayload> | null;
+	eventQueue: RequestQueue<EventPayload> | null;
 	sequenceNumber: number;
 	verbose: boolean;
 	app?: string;
@@ -57,6 +65,11 @@ export class Logdash {
 						(metrics) => transport.sendMetrics(metrics),
 						{ batchSize: 1 },
 					),
+					// Events too, so a retry re-sends only the event that failed
+					eventQueue: new RequestQueue(
+						(events) => transport.sendEvents(events),
+						{ batchSize: 1 },
+					),
 					sequenceNumber: 0,
 					verbose,
 					// An empty app means no app: leave it out of payloads
@@ -68,6 +81,7 @@ export class Logdash {
 				this.core = {
 					logQueue: null,
 					metricQueue: null,
+					eventQueue: null,
 					sequenceNumber: 0,
 					verbose,
 				};
@@ -153,6 +167,58 @@ export class Logdash {
 		});
 	}
 
+	// === Event Methods ===
+
+	track(
+		name: string,
+		props?: Record<string, string | number | boolean>,
+		options?: { userId?: string | number },
+	): void {
+		// typeof first: RegExp.test turns undefined into 'undefined', a valid name
+		if (
+			typeof name !== 'string' ||
+			!EVENT_NAME.test(name) ||
+			WEBSITE_EVENTS.includes(name)
+		) {
+			internalLogger.warn(
+				`Event "${name}" was not sent: its name must match ${EVENT_NAME} and not be one of ${WEBSITE_EVENTS.join(', ')}.`,
+			);
+			return;
+		}
+
+		const userId = options?.userId;
+		if (typeof userId === 'string' && userId.includes('@')) {
+			internalLogger.warn(
+				`Event "${name}" was not sent: userId must be an internal ID, never an email address.`,
+			);
+			return;
+		}
+
+		if (!this.core.eventQueue) {
+			// Local mode: print the event like a log, send nothing
+			this.printToConsole(
+				'EVENT',
+				EVENT_COLOR,
+				this.formatData(props ? [name, props] : [name]),
+				new Date(),
+			);
+			return;
+		}
+
+		if (this.core.verbose) {
+			internalLogger.verbose(`Tracking event ${name}`);
+		}
+
+		this.core.eventQueue.add({
+			// Retries re-send this same id, so the API stores the event once
+			id: randomUUID(),
+			name,
+			props,
+			userId,
+			app: this.core.app,
+		});
+	}
+
 	// === Namespace ===
 
 	withNamespace(name: string): Logdash {
@@ -162,19 +228,17 @@ export class Logdash {
 	// === Lifecycle ===
 
 	async flush(): Promise<void> {
-		if (!this.core.logQueue || !this.core.metricQueue) {
-			return; // Local mode: nothing to flush
-		}
-
 		await Promise.all([
-			this.core.logQueue.flush(),
-			this.core.metricQueue.flush(),
+			this.core.logQueue?.flush(),
+			this.core.metricQueue?.flush(),
+			this.core.eventQueue?.flush(),
 		]);
 	}
 
 	destroy(): void {
 		this.core.logQueue?.destroy();
 		this.core.metricQueue?.destroy();
+		this.core.eventQueue?.destroy();
 	}
 
 	// === Private Methods ===
@@ -184,7 +248,12 @@ export class Logdash {
 		const now = new Date();
 
 		// Print to console with colors
-		this.printToConsole(level, message, now);
+		this.printToConsole(
+			level.toUpperCase(),
+			LOG_LEVEL_COLORS[level],
+			message,
+			now,
+		);
 
 		// Queue for sending (only in remote mode)
 		this.core.logQueue?.add({
@@ -197,20 +266,23 @@ export class Logdash {
 		});
 	}
 
-	private printToConsole(level: LogLevel, message: string, date: Date): void {
-		const color = LOG_LEVEL_COLORS[level];
-
+	private printToConsole(
+		label: string,
+		color: [number, number, number],
+		message: string,
+		date: Date,
+	): void {
 		const datePrefix = chalk.rgb(156, 156, 156)(`[${date.toISOString()}]`);
-		const levelPrefix = chalk.rgb(
+		const labelPrefix = chalk.rgb(
 			color[0],
 			color[1],
 			color[2],
-		)(`${level.toUpperCase()} `);
+		)(`${label} `);
 		const namespacePrefix = this.namespace
 			? chalk.rgb(180, 180, 180)(`[${this.namespace}] `)
 			: '';
 
-		const formattedMessage = `${datePrefix} ${levelPrefix}${namespacePrefix}${message}`;
+		const formattedMessage = `${datePrefix} ${labelPrefix}${namespacePrefix}${message}`;
 		console.log(formattedMessage);
 	}
 

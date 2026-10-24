@@ -64,10 +64,25 @@ logdash.setMetric('users', 0);
 logdash.mutateMetric('users', 1);
 ```
 
+## Events
+
+```typescript
+import { Logdash } from '@logdash/node';
+
+const logdash = new Logdash('<your-api-key>');
+
+logdash.track('agent_run', { model: 'opus', tools: 3 }, { userId: user.id });
+```
+
+Events show up in your domain's Analytics as goals, with a daily trend.
+For signed-in users, pass their internal ID as `userId`, so one person counts once across your website and apps.
+Without it, Logdash counts a visitor of that app that changes every day.
+Never put personal data in props.
+
 ## Graceful Shutdown
 
 ```typescript
-// Ensure all logs and metrics are sent before exiting
+// Ensure all logs, metrics and events are sent before exiting
 await logdash.flush();
 ```
 

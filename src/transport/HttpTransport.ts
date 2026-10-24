@@ -28,6 +28,13 @@ export class HttpTransport {
 		);
 	}
 
+	async sendEvents(events: EventPayload[]): Promise<void> {
+		// The API takes one event per request
+		await Promise.all(
+			events.map((event) => this.request('POST', '/events', event)),
+		);
+	}
+
 	private async request(
 		method: 'POST' | 'PUT',
 		path: string,
@@ -72,5 +79,13 @@ export interface MetricPayload {
 	value: number;
 	operation: 'set' | 'change';
 	namespace?: string;
+	app?: string;
+}
+
+export interface EventPayload {
+	id: string;
+	name: string;
+	props?: Record<string, string | number | boolean>;
+	userId?: string | number;
 	app?: string;
 }

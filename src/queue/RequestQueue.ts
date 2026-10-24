@@ -72,6 +72,8 @@ export class RequestQueue<T> {
 			}
 			this.scheduleFlush();
 		}, this.options.flushIntervalMs);
+		// The timer alone must not keep the process alive: flush() sends the rest
+		this.flushTimer.unref?.();
 	}
 
 	private flushBatch(): void {

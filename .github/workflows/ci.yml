@@ -74,10 +74,10 @@ jobs:
             - run: pnpm install --frozen-lockfile --ignore-scripts
             - run: npm version "$V" --no-git-tag-version
             - run: pnpm build
-            - run: npm publish --access public
-            # Last, since it creates the tag version.ts counts from: a failed publish retries on the next merge.
-            # If this step fails after a successful publish, later runs compute the same version and fail at publish.
-            # Recover by creating the tag by hand: gh release create v<version> --generate-notes --target <sha that was published>
+            # Skipped when this version is already on npm, so rerunning a run whose release step failed just tags.
+            - run: '[ "$(npm view "@logdash/node@$V" version 2>/dev/null)" = "$V" ] || npm publish --access public'
+            # Last, since it creates the tag version.ts counts from: until it exists, later runs compute the same
+            # version, so a failed publish retries on the next merge and a failed release on a rerun.
             - run: gh release create "v$V" --generate-notes --target "$GITHUB_SHA"
               env:
                   GH_TOKEN: ${{ github.token }}

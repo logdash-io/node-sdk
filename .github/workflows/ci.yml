@@ -76,6 +76,8 @@ jobs:
             - run: pnpm build
             - run: npm publish --access public
             # Last, since it creates the tag version.ts counts from: a failed publish retries on the next merge.
+            # If this step fails after a successful publish, later runs compute the same version and fail at publish.
+            # Recover by creating the tag by hand: gh release create v<version> --generate-notes --target <sha that was published>
             - run: gh release create "v$V" --generate-notes --target "$GITHUB_SHA"
               env:
                   GH_TOKEN: ${{ github.token }}

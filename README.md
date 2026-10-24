@@ -32,6 +32,24 @@ authLogdash.info('User logged in');
 authLogdash.error('Authentication failed');
 ```
 
+## Apps
+
+A domain has one domain key, shared by all of its apps, for example a desktop app, an API and a landing page.
+Set `app` to name this app, so the dashboard can filter logs and metrics by app.
+Logdash creates the app when its first log or metric arrives.
+
+```typescript
+const logdash = new Logdash('<your-domain-key>', { app: 'desktop' });
+
+logdash.info('Window opened');
+
+// Namespaced instances keep the app
+const sidebarLogdash = logdash.withNamespace('sidebar');
+sidebarLogdash.info('Sidebar collapsed');
+```
+
+Older service keys ignore `app`.
+
 ## Metrics
 
 ```typescript
@@ -70,6 +88,7 @@ new Logdash(apiKey?, options?)
 | `apiKey`          | no       | -                        | Api key used to authorize against logdash servers. If you don't provide one, logs will be logged into local console only |
 | `options.host`    | no       | `https://api.logdash.io` | Custom API host, useful with self-hosted instances                                                                       |
 | `options.verbose` | no       | `false`                  | Useful for debugging purposes                                                                                            |
+| `options.app`     | no       | -                        | Name of the app that sends the logs and metrics, for example `desktop` or `api`. See [Apps](#apps)                       |
 
 ## License
 

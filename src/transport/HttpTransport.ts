@@ -64,6 +64,7 @@ export interface LogPayload {
 	createdAt: string;
 	sequenceNumber: number;
 	namespace?: string;
+	app?: string;
 }
 
 export interface MetricPayload {
@@ -71,4 +72,5 @@ export interface MetricPayload {
 	value: number;
 	operation: 'set' | 'change';
 	namespace?: string;
+	app?: string;
 }

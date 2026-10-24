@@ -1,5 +1,17 @@
 # @logdash/core
 
+## 1.1.0
+
+### Minor Changes
+
+- 0ff4b8c: feat: add `track` that sends events, which show up as goals in the domain's Analytics
+- 7c344ef: feat: add `app` option that names the app sending each log and metric
+
+### Patch Changes
+
+- 7c344ef: fix: retry only the metric that failed, so a failed request no longer re-applies `mutateMetric` changes that already went through
+- 0ff4b8c: fix: let the process exit after `flush()`, since the background flush timer no longer keeps it alive
+
 ## 1.0.2
 
 ### Patch Changes

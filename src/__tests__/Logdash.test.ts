@@ -2,12 +2,21 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Logdash } from '../Logdash.js';
 
 describe('Logdash', () => {
+	let mockFetch: ReturnType<typeof vi.fn>;
+
 	beforeEach(() => {
 		vi.spyOn(console, 'log').mockImplementation(() => {});
+		mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			statusText: 'OK',
+		});
+		vi.stubGlobal('fetch', mockFetch);
 	});
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
 	});
 
 	describe('constructor', () => {
@@ -168,5 +177,101 @@ describe('Logdash', () => {
 			await expect(logdash.flush()).resolves.toBeUndefined();
 			logdash.destroy();
 		});
+	});
+
+	describe('metric retries', () => {
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it('re-sends only the metric that failed', async () => {
+			vi.useFakeTimers();
+			mockFetch.mockImplementation(async (_url, init) =>
+				JSON.parse(init.body).name === 'failing'
+					? { ok: false, status: 500, statusText: 'Server Error' }
+					: { ok: true, status: 200, statusText: 'OK' },
+			);
+			const logdash = new Logdash('test-key');
+			logdash.mutateMetric('requests', 1);
+			logdash.mutateMetric('failing', 1);
+
+			const flushed = logdash.flush();
+			await vi.advanceTimersByTimeAsync(10_000);
+			await flushed;
+			logdash.destroy();
+
+			const sent = mockFetch.mock.calls.map(
+				([, init]) => JSON.parse(init.body).name,
+			);
+			expect(sent.filter((name) => name === 'requests')).toHaveLength(1);
+			expect(sent.filter((name) => name === 'failing')).toHaveLength(3);
+		});
+	});
+
+	describe('app', () => {
+		// Sends a log and a metric from the root and from a namespaced
+		// instance, and returns the request bodies they produced
+		async function send(logdash: Logdash) {
+			const auth = logdash.withNamespace('auth');
+			logdash.info('root log');
+			logdash.setMetric('users', 1);
+			auth.info('auth log');
+			auth.mutateMetric('logins', 1);
+			await logdash.flush();
+			logdash.destroy();
+
+			const bodies = (path: string) =>
+				mockFetch.mock.calls
+					.filter(([url]) => url.endsWith(path))
+					.map(([, init]) => JSON.parse(init.body));
+
+			return {
+				logs: bodies('/logs/batch').flatMap((body) => body.logs),
+				metrics: bodies('/metrics'),
+			};
+		}
+
+		it('adds app to every log and metric', async () => {
+			const { logs, metrics } = await send(
+				new Logdash('test-key', { app: 'desktop' }),
+			);
+
+			expect(logs).toEqual([
+				expect.objectContaining({
+					message: 'root log',
+					app: 'desktop',
+				}),
+				expect.objectContaining({
+					message: 'auth log',
+					namespace: 'auth',
+					app: 'desktop',
+				}),
+			]);
+			expect(metrics).toEqual([
+				{ name: 'users', value: 1, operation: 'set', app: 'desktop' },
+				{
+					name: 'logins',
+					value: 1,
+					operation: 'change',
+					namespace: 'auth',
+					app: 'desktop',
+				},
+			]);
+		});
+
+		it.each([undefined, ''])(
+			'leaves app out of every log and metric when app is %j',
+			async (app) => {
+				const { logs, metrics } = await send(
+					new Logdash('test-key', { app }),
+				);
+
+				expect(logs).toHaveLength(2);
+				expect(metrics).toHaveLength(2);
+				for (const payload of [...logs, ...metrics]) {
+					expect(payload).not.toHaveProperty('app');
+				}
+			},
+		);
 	});
 });

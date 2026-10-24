@@ -1,20 +1,20 @@
 {
-    "files": [],
-    "include": [],
-    "references": [
-        {
-            "path": "./tsconfig.lib.json"
-        }
-    ],
-    "compilerOptions": {
-        "rootDir": ".",
-        "forceConsistentCasingInFileNames": true,
-        "strict": false,
-        "noImplicitOverride": true,
-        "noPropertyAccessFromIndexSignature": true,
-        "noImplicitReturns": true,
-        "noFallthroughCasesInSwitch": true,
-        "experimentalDecorators": true,
-        "emitDecoratorMetadata": true,
-    },
+	"files": [],
+	"include": [],
+	"references": [
+		{
+			"path": "./tsconfig.lib.json"
+		}
+	],
+	"compilerOptions": {
+		"rootDir": ".",
+		"forceConsistentCasingInFileNames": true,
+		"strict": false,
+		"noImplicitOverride": true,
+		"noPropertyAccessFromIndexSignature": true,
+		"noImplicitReturns": true,
+		"noFallthroughCasesInSwitch": true,
+		"experimentalDecorators": true,
+		"emitDecoratorMetadata": true
+	}
 }

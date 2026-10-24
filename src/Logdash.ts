@@ -11,6 +11,7 @@ import { LogLevel, LOG_LEVEL_COLORS } from './types/LogLevel.js';
 export interface LogdashOptions {
 	host?: string;
 	verbose?: boolean;
+	app?: string;
 }
 
 interface LogdashCore {
@@ -18,6 +19,7 @@ interface LogdashCore {
 	metricQueue: RequestQueue<MetricPayload> | null;
 	sequenceNumber: number;
 	verbose: boolean;
+	app?: string;
 }
 
 export class Logdash {
@@ -49,11 +51,16 @@ export class Logdash {
 					logQueue: new RequestQueue((logs) =>
 						transport.sendLogs(logs),
 					),
-					metricQueue: new RequestQueue((metrics) =>
-						transport.sendMetrics(metrics),
+					// Each metric is its own request, so it is its own batch:
+					// a retry must not re-apply metrics that already went through
+					metricQueue: new RequestQueue(
+						(metrics) => transport.sendMetrics(metrics),
+						{ batchSize: 1 },
 					),
 					sequenceNumber: 0,
 					verbose,
+					// An empty app means no app: leave it out of payloads
+					app: options?.app || undefined,
 				};
 			} else {
 				internalLogger.warn('No API key provided, using local mode.');
@@ -124,6 +131,7 @@ export class Logdash {
 			value,
 			operation: 'set',
 			namespace: this.namespace,
+			app: this.core.app,
 		});
 	}
 
@@ -141,6 +149,7 @@ export class Logdash {
 			value: delta,
 			operation: 'change',
 			namespace: this.namespace,
+			app: this.core.app,
 		});
 	}
 
@@ -184,6 +193,7 @@ export class Logdash {
 			createdAt: now.toISOString(),
 			sequenceNumber: this.core.sequenceNumber++,
 			namespace: this.namespace,
+			app: this.core.app,
 		});
 	}
 

@@ -1,12 +1,12 @@
 {
-  "useTabs": true,
-  "singleQuote": true,
-  "trailingComma": "all",
-  "printWidth": 80,
-  "semi": true,
-  "proseWrap": "preserve",
-  "endOfLine": "lf",
-  "tabWidth": 4,
-  "arrowParens": "always",
-  "htmlWhitespaceSensitivity": "ignore"
+	"useTabs": true,
+	"singleQuote": true,
+	"trailingComma": "all",
+	"printWidth": 80,
+	"semi": true,
+	"proseWrap": "preserve",
+	"endOfLine": "lf",
+	"tabWidth": 4,
+	"arrowParens": "always",
+	"htmlWhitespaceSensitivity": "ignore"
 }

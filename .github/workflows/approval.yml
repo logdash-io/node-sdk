@@ -1,0 +1,45 @@
+name: Approval
+
+# Logdash team members merge their own pull requests on green checks.
+# Pull requests from anyone else need a team member to approve their latest commit; outside collaborators cannot approve each other's.
+# GitHub judges a required check by its newest run, so every run reads the reviews as they stand and never skips.
+# ponytail: anyone with write access can edit this file on their branch, so it stops accidental merges, not deliberate ones.
+on:
+    pull_request:
+    pull_request_review:
+        types: [submitted, dismissed]
+
+permissions:
+    pull-requests: read
+
+jobs:
+    approval:
+        name: team approval
+        runs-on: ubuntu-latest
+        steps:
+            - env:
+                  GH_TOKEN: ${{ github.token }}
+                  AUTHOR: ${{ github.event.pull_request.author_association }}
+                  PR: ${{ github.event.pull_request.number }}
+                  HEAD: ${{ github.event.pull_request.head.sha }}
+              run: |
+                  case "$AUTHOR" in OWNER|MEMBER) echo "Opened by a Logdash team member."; exit 0 ;; esac
+                  # Private organization members can show up as CONTRIBUTOR or NONE here, so a team review is a user review with write access from anyone but an outside collaborator.
+                  # shellcheck disable=SC2016 # $owner, $name and $pr are GraphQL variables, not shell ones.
+                  verdict=$(gh api graphql -F pr="$PR" -f owner="${GITHUB_REPOSITORY%/*}" -f name="${GITHUB_REPOSITORY#*/}" -f query='
+                    query($owner: String!, $name: String!, $pr: Int!) {
+                      repository(owner: $owner, name: $name) {
+                        pullRequest(number: $pr) {
+                          latestOpinionatedReviews(first: 100, writersOnly: true) {
+                            nodes { state authorAssociation author { __typename } commit { oid } }
+                          }
+                        }
+                      }
+                    }' | jq -r --arg head "$HEAD" '
+                    [.data.repository.pullRequest.latestOpinionatedReviews.nodes[] | select(.author.__typename == "User" and .authorAssociation != "COLLABORATOR")]
+                    | if any(.state == "CHANGES_REQUESTED") then "A Logdash team member requested changes"
+                      elif any(.state == "APPROVED" and .commit.oid == $head) then "approved"
+                      else "No Logdash team member has approved the latest commit yet" end')
+                  [ "$verdict" = approved ] && { echo "Approved by a Logdash team member."; exit 0; }
+                  echo "::error::$verdict. Outside contributions merge once a Logdash team member approves their latest commit."
+                  exit 1

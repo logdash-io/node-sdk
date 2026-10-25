@@ -4,33 +4,80 @@ on:
     push:
         branches: [main]
     pull_request:
-        branches: [main]
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    # A release in progress must finish; a newer merge waits and releases after it.
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Read-only unless a job asks for more: dependencies run in every job.
+permissions:
+    contents: read
 
 jobs:
     test:
         runs-on: ubuntu-latest
-
         strategy:
             matrix:
-                node-version: [18, 20, 22]
-
+                node-version: [18, 20, 22, 24]
         steps:
-            - uses: actions/checkout@v4
-
-            - name: Install pnpm
-              uses: pnpm/action-setup@v4
-
-            - name: Use Node.js ${{ matrix.node-version }}
-              uses: actions/setup-node@v4
+            - uses: actions/checkout@v7
+            - uses: pnpm/action-setup@v6
+            - uses: actions/setup-node@v7
               with:
                   node-version: ${{ matrix.node-version }}
-                  cache: 'pnpm'
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm build
+            - run: pnpm lint
+            - run: pnpm test
+            # The release scripts run on Node 24, as in the version job.
+            - if: matrix.node-version == 24
+              run: node --test 'scripts/*.test.ts'
 
-            - name: Install dependencies
-              run: pnpm install
+    # The version the merged commits call for; empty when none of them is a feat, fix, perf, or breaking change.
+    version:
+        if: github.event_name == 'push'
+        runs-on: ubuntu-latest
+        outputs:
+            next: ${{ steps.next.outputs.version }}
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0 # the tags and commits since the last release
+            - uses: actions/setup-node@v7
+              with:
+                  node-version: 24
+            # An assignment, unlike echo "version=$(...)", fails the step when the script fails.
+            - id: next
+              run: |
+                  version=$(node scripts/version.ts)
+                  echo "version=$version" >> "$GITHUB_OUTPUT"
 
-            - name: Build
-              run: pnpm build
-
-            - name: Test
-              run: pnpm test
+    # Publishes the merge to npm, then tags it with a GitHub Release.
+    release:
+        needs: [test, version]
+        if: needs.version.outputs.next != ''
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write # the release and its tag
+            id-token: write # npm trusted publishing
+        env:
+            V: ${{ needs.version.outputs.next }}
+        steps:
+            - uses: actions/checkout@v7
+            - uses: pnpm/action-setup@v6
+            - uses: actions/setup-node@v7
+              with:
+                  node-version: 24 # its npm, 11.5.1 or newer, publishes with trusted publishing
+            # This job can publish, so no dependency runs its install scripts here.
+            - run: pnpm install --frozen-lockfile --ignore-scripts
+            - run: npm version "$V" --no-git-tag-version
+            - run: pnpm build
+            # Skipped when this version is already on npm, so rerunning a run whose release step failed just tags.
+            - run: '[ "$(npm view "@logdash/node@$V" version 2>/dev/null)" = "$V" ] || npm publish --access public'
+            # Last, since it creates the tag version.ts counts from: until it exists, later runs compute the same
+            # version, so a failed publish retries on the next merge and a failed release on a rerun.
+            - run: gh release create "v$V" --generate-notes --target "$GITHUB_SHA"
+              env:
+                  GH_TOKEN: ${{ github.token }}
